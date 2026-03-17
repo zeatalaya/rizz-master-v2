@@ -1,0 +1,55 @@
+<!--
+  Open this in a browser, right-click each canvas, and "Save Image As" to get your PWA icons.
+  Or use a tool like sharp/canvas to generate them programmatically.
+-->
+<!DOCTYPE html>
+<html>
+<body>
+<script>
+function generateIcon(size, maskable) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  // Background gradient
+  const grad = ctx.createLinearGradient(0, 0, size, size);
+  grad.addColorStop(0, '#FD297B');
+  grad.addColorStop(0.5, '#FF5864');
+  grad.addColorStop(1, '#FF655B');
+
+  if (maskable) {
+    // Maskable: fill entire canvas
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+  } else {
+    // Regular: rounded rect
+    const r = size * 0.2;
+    ctx.beginPath();
+    ctx.roundRect(0, 0, size, size, r);
+    ctx.fillStyle = grad;
+    ctx.fill();
+  }
+
+  // Flame emoji text
+  ctx.font = `${size * 0.5}px serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'white';
+  ctx.fillText('🔥', size/2, size/2);
+
+  const link = document.createElement('a');
+  const suffix = maskable ? '-maskable' : '';
+  link.download = `icon-${size}${suffix}.png`;
+  link.href = canvas.toDataURL();
+  link.textContent = `Download icon-${size}${suffix}.png`;
+  document.body.appendChild(link);
+  document.body.appendChild(document.createElement('br'));
+}
+
+generateIcon(192, false);
+generateIcon(512, false);
+generateIcon(512, true);
+</script>
+</body>
+</html>

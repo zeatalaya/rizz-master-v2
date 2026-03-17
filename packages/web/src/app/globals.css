@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+:root {
+  --tinder-pink: #FD297B;
+  --tinder-red: #FF5864;
+  --tinder-orange: #FF655B;
+  --tinder-gradient: linear-gradient(135deg, #FD297B 0%, #FF5864 50%, #FF655B 100%);
+  --tinder-gold: #E5A753;
+  --bumble-yellow: #FFC629;
+  --bumble-gradient: linear-gradient(135deg, #FFC629 0%, #F5A623 100%);
+  --hinge-dark: #1A1A1A;
+  --hinge-gradient: linear-gradient(135deg, #1A1A1A 0%, #333333 100%);
+  --platform-gradient: var(--tinder-gradient);
+  --platform-primary: var(--tinder-pink);
+}
+
+body {
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #111111;
+  color: #ffffff;
+  min-height: 100dvh;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(253, 41, 123, 0.3);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(253, 41, 123, 0.5);
+}
+
+input[type="tel"]::-webkit-inner-spin-button,
+input[type="tel"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+}

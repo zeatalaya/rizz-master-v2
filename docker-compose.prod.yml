@@ -1,0 +1,10 @@
+services:
+  rizz-master:
+    build:
+      context: .
+      dockerfile: packages/web/Dockerfile
+    environment:
+      - DSTACK_SIMULATOR_ENDPOINT=
+      - SESSION_SECRET=${SESSION_SECRET}
+    volumes:
+      - /var/run/dstack.sock:/var/run/dstack.sock

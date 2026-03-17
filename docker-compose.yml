@@ -1,0 +1,17 @@
+services:
+  tappd-simulator:
+    image: phalanetwork/tappd-simulator:latest
+    ports:
+      - "8090:8090"
+
+  rizz-master:
+    build:
+      context: .
+      dockerfile: packages/web/Dockerfile
+    ports:
+      - "3069:3069"
+    environment:
+      - DSTACK_SIMULATOR_ENDPOINT=http://tappd-simulator:8090
+      - SESSION_SECRET=${SESSION_SECRET}
+    depends_on:
+      - tappd-simulator

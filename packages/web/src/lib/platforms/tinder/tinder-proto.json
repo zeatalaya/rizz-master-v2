@@ -1,0 +1,210 @@
+{
+  "nested": {
+    "Phone": {
+      "oneofs": { "check": { "oneof": ["captchaToken", "iosDeviceToken", "androidJws"] } },
+      "fields": {
+        "phone": { "type": "string", "id": 1 },
+        "refreshToken": { "type": "StringValue", "id": 2 },
+        "captchaToken": { "type": "StringValue", "id": 3 },
+        "iosDeviceToken": { "type": "StringValue", "id": 4 },
+        "androidJws": { "type": "StringValue", "id": 5 }
+      }
+    },
+    "PhoneOtp": {
+      "fields": {
+        "phone": { "type": "StringValue", "id": 1 },
+        "otp": { "type": "string", "id": 2 },
+        "refreshToken": { "type": "StringValue", "id": 3 }
+      }
+    },
+    "Email": {
+      "fields": {
+        "email": { "type": "string", "id": 1 },
+        "refreshToken": { "type": "StringValue", "id": 2 },
+        "marketingOptIn": { "type": "BoolValue", "id": 3 }
+      }
+    },
+    "EmailOtp": {
+      "fields": {
+        "email": { "type": "StringValue", "id": 1 },
+        "otp": { "type": "string", "id": 2 },
+        "refreshToken": { "type": "StringValue", "id": 3 }
+      }
+    },
+    "GoogleToken": {
+      "fields": {
+        "externalToken": { "type": "string", "id": 1 },
+        "refreshToken": { "type": "StringValue", "id": 2 },
+        "marketingOptIn": { "type": "BoolValue", "id": 3 },
+        "userBehavior": { "type": "BoolValue", "id": 4 }
+      }
+    },
+    "FacebookToken": {
+      "fields": {
+        "externalToken": { "type": "string", "id": 1 },
+        "refreshToken": { "type": "StringValue", "id": 2 }
+      }
+    },
+    "RefreshAuth": {
+      "fields": {
+        "refreshToken": { "type": "string", "id": 1 }
+      }
+    },
+    "Captcha": {
+      "fields": {
+        "referenceToken": { "type": "string", "id": 1 },
+        "captchaToken": { "type": "string", "id": 2 }
+      }
+    },
+    "AuthGatewayRequest": {
+      "oneofs": {
+        "factor": {
+          "oneof": ["phone", "phoneOtp", "email", "googleToken", "emailOtp", "facebookToken", "refreshAuth", "captcha"]
+        }
+      },
+      "fields": {
+        "phone": { "type": "Phone", "id": 1 },
+        "phoneOtp": { "type": "PhoneOtp", "id": 2 },
+        "email": { "type": "Email", "id": 3 },
+        "googleToken": { "type": "GoogleToken", "id": 4 },
+        "emailOtp": { "type": "EmailOtp", "id": 5 },
+        "facebookToken": { "type": "FacebookToken", "id": 6 },
+        "refreshAuth": { "type": "RefreshAuth", "id": 10 },
+        "captcha": { "type": "Captcha", "id": 18 }
+      }
+    },
+    "MetaProto": {
+      "fields": {
+        "upstreamTime": { "type": "Timestamp", "id": 1 },
+        "startTime": { "type": "Timestamp", "id": 2 }
+      }
+    },
+    "ErrorProto": {
+      "fields": {
+        "code": { "type": "int32", "id": 1 },
+        "message": { "type": "string", "id": 2 }
+      }
+    },
+    "GetPhoneState": {
+      "fields": {
+        "refreshToken": { "type": "StringValue", "id": 1 }
+      }
+    },
+    "ValidatePhoneOtpState": {
+      "fields": {
+        "refreshToken": { "type": "StringValue", "id": 1 },
+        "phone": { "type": "string", "id": 2 },
+        "otpLength": { "type": "Int32Value", "id": 3 },
+        "smsSent": { "type": "BoolValue", "id": 4 }
+      }
+    },
+    "EmailMarketing": {
+      "fields": {
+        "showMarketingOptIn": { "type": "BoolValue", "id": 2 },
+        "showStrictOptIn": { "type": "BoolValue", "id": 3 },
+        "checkedByDefault": { "type": "BoolValue", "id": 4 }
+      }
+    },
+    "GetEmailState": {
+      "fields": {
+        "refreshToken": { "type": "StringValue", "id": 1 },
+        "emailMarketing": { "type": "EmailMarketing", "id": 2 }
+      }
+    },
+    "ValidateEmailOtpState": {
+      "oneofs": { "email": { "oneof": ["unmaskedEmail", "maskedEmail"] } },
+      "fields": {
+        "refreshToken": { "type": "StringValue", "id": 1 },
+        "unmaskedEmail": { "type": "string", "id": 2 },
+        "maskedEmail": { "type": "string", "id": 3 },
+        "otpLength": { "type": "Int32Value", "id": 4 },
+        "emailSent": { "type": "BoolValue", "id": 5 },
+        "emailMarketing": { "type": "EmailMarketing", "id": 6 }
+      }
+    },
+    "ValidateGoogleState": {
+      "fields": {
+        "refreshToken": { "type": "StringValue", "id": 1 },
+        "maskedEmail": { "type": "string", "id": 2 }
+      }
+    },
+    "GoogleAccountNotFound": {
+      "fields": {
+        "refreshToken": { "type": "StringValue", "id": 1 },
+        "maskedEmail": { "type": "string", "id": 2 }
+      }
+    },
+    "OnboardingState": {
+      "fields": {
+        "refreshToken": { "type": "string", "id": 1 },
+        "onboardingToken": { "type": "string", "id": 2 },
+        "userId": { "type": "StringValue", "id": 3 }
+      }
+    },
+    "LoginResultCaptcha": {
+      "options": { "allow_alias": true },
+      "values": { "CAPTCHA_INVALID": 0, "CAPTCHA_V1": 1, "CAPTCHA_V2": 2 }
+    },
+    "LoginResult": {
+      "fields": {
+        "refreshToken": { "type": "string", "id": 1 },
+        "authToken": { "type": "string", "id": 2 },
+        "captcha": { "type": "LoginResultCaptcha", "id": 3 },
+        "userId": { "type": "string", "id": 4 },
+        "authTokenTtl": { "type": "Int64Value", "id": 5 }
+      }
+    },
+    "SocialConnectionList": {
+      "fields": {
+        "refreshToken": { "type": "StringValue", "id": 1 },
+        "connections": { "type": "StringValue", "id": 2 }
+      }
+    },
+    "CaptchaState": {
+      "fields": {
+        "referenceToken": { "type": "string", "id": 1 }
+      }
+    },
+    "AuthGatewayResponse": {
+      "oneofs": {
+        "data": {
+          "oneof": [
+            "getPhoneState", "validatePhoneOtpState", "getEmailState",
+            "validateEmailOtpState", "onboardingState", "loginResult",
+            "socialConnectionList", "validateGoogleState", "googleAccountNotFound",
+            "captchaState"
+          ]
+        }
+      },
+      "fields": {
+        "meta": { "type": "MetaProto", "id": 1 },
+        "error": { "type": "ErrorProto", "id": 2 },
+        "getPhoneState": { "type": "GetPhoneState", "id": 3 },
+        "validatePhoneOtpState": { "type": "ValidatePhoneOtpState", "id": 4 },
+        "getEmailState": { "type": "GetEmailState", "id": 5 },
+        "validateEmailOtpState": { "type": "ValidateEmailOtpState", "id": 6 },
+        "onboardingState": { "type": "OnboardingState", "id": 7 },
+        "loginResult": { "type": "LoginResult", "id": 8 },
+        "socialConnectionList": { "type": "SocialConnectionList", "id": 9 },
+        "validateGoogleState": { "type": "ValidateGoogleState", "id": 13 },
+        "googleAccountNotFound": { "type": "GoogleAccountNotFound", "id": 15 },
+        "captchaState": { "type": "CaptchaState", "id": 16 }
+      }
+    },
+    "Timestamp": {
+      "fields": {
+        "seconds": { "type": "int64", "id": 1 },
+        "nanos": { "type": "int32", "id": 2 }
+      }
+    },
+    "DoubleValue": { "fields": { "value": { "type": "double", "id": 1 } } },
+    "FloatValue": { "fields": { "value": { "type": "float", "id": 1 } } },
+    "Int64Value": { "fields": { "value": { "type": "int64", "id": 1 } } },
+    "UInt64Value": { "fields": { "value": { "type": "uint64", "id": 1 } } },
+    "Int32Value": { "fields": { "value": { "type": "int32", "id": 1 } } },
+    "UInt32Value": { "fields": { "value": { "type": "uint32", "id": 1 } } },
+    "BoolValue": { "fields": { "value": { "type": "bool", "id": 1 } } },
+    "StringValue": { "fields": { "value": { "type": "string", "id": 1 } } },
+    "BytesValue": { "fields": { "value": { "type": "bytes", "id": 1 } } }
+  }
+}
