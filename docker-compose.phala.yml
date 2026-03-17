@@ -1,0 +1,11 @@
+services:
+  rizz-master:
+    image: ghcr.io/zeatalaya/rizz-master-v2:latest
+    ports:
+      - "3069:3069"
+    environment:
+      - NODE_ENV=production
+      - SESSION_SECRET=TEE-rizz-master-v2-32char-secret-key!!!!!
+      - PROXY_URL=http://2ZuXTZ2zb4KgMo76:wE38G5UEdJoNsNhv@geo.iproyal.com:12321
+    volumes:
+      - /var/run/dstack.sock:/var/run/dstack.sock
