@@ -16,6 +16,9 @@ export const metadata: Metadata = {
   title: "Rizz Master v2",
   description: "Analyze your dating app stats across Tinder, Bumble, and Hinge",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/favicon.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",

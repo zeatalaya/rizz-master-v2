@@ -49,6 +49,22 @@ export async function POST(req: NextRequest) {
       result = await authAdapter.verifyCode(phoneNumber, code, refreshToken, ids);
     }
 
+    // On transient Tinder errors, retry ONCE
+    if (result.step === "error") {
+      const msg = result.message;
+      if (msg.includes("42901") || msg.includes("42903") || msg.includes("fetch failed")) {
+        console.log(`[verify-code] Transient error on ${platform}, retrying once...`);
+        if (type === "email" && platform === "tinder") {
+          const { verifyEmailOtp } = await import("@/lib/platforms/tinder/auth");
+          const email = clientEmail || session.email || "";
+          result = await verifyEmailOtp(code, refreshToken, email, phoneNumber || "", ids);
+        } else {
+          const authAdapter = getAuthAdapter(platform);
+          result = await authAdapter.verifyCode(phoneNumber, code, refreshToken, ids);
+        }
+      }
+    }
+
     if (result.step === "error") {
       console.error(`[verify-code] ${platform} auth error:`, result.message);
       return NextResponse.json(
