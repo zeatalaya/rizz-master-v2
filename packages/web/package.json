@@ -16,6 +16,9 @@
     "iron-session": "^8.0.4",
     "next": "16.1.6",
     "protobufjs": "^8.0.0",
+    "puppeteer-core": "^24.39.1",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "undici": "^6.24.1"

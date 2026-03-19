@@ -31,6 +31,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No device ID. Start over." }, { status: 400 });
     }
 
+    console.log(`[verify-code] platform=${platform}, phone=${phoneNumber}, hasRefreshToken=${!!refreshToken}, refreshTokenLen=${refreshToken?.length}, deviceId=${ids.deviceId}`);
+
     let result;
 
     if (type === "email" && platform === "tinder") {
@@ -49,19 +51,21 @@ export async function POST(req: NextRequest) {
       result = await authAdapter.verifyCode(phoneNumber, code, refreshToken, ids);
     }
 
-    // On transient Tinder errors, retry ONCE
-    if (result.step === "error") {
+    // On transient errors, retry up to 3 times with increasing delays
+    const transientCodes = ["42901", "42903", "41201", "40120", "50000", "fetch failed"];
+    for (let retry = 0; retry < 3 && result.step === "error"; retry++) {
       const msg = result.message;
-      if (msg.includes("42901") || msg.includes("42903") || msg.includes("fetch failed")) {
-        console.log(`[verify-code] Transient error on ${platform}, retrying once...`);
-        if (type === "email" && platform === "tinder") {
-          const { verifyEmailOtp } = await import("@/lib/platforms/tinder/auth");
-          const email = clientEmail || session.email || "";
-          result = await verifyEmailOtp(code, refreshToken, email, phoneNumber || "", ids);
-        } else {
-          const authAdapter = getAuthAdapter(platform);
-          result = await authAdapter.verifyCode(phoneNumber, code, refreshToken, ids);
-        }
+      if (!transientCodes.some(c => msg.includes(c))) break;
+      const delay = (retry + 1) * 3000; // 3s, 6s, 9s
+      console.log(`[verify-code] Transient error on ${platform} (retry ${retry + 1}/3), waiting ${delay}ms...`);
+      await new Promise(r => setTimeout(r, delay));
+      if (type === "email" && platform === "tinder") {
+        const { verifyEmailOtp } = await import("@/lib/platforms/tinder/auth");
+        const email = clientEmail || session.email || "";
+        result = await verifyEmailOtp(code, refreshToken, email, phoneNumber || "", ids);
+      } else {
+        const authAdapter = getAuthAdapter(platform);
+        result = await authAdapter.verifyCode(phoneNumber, code, refreshToken, ids);
       }
     }
 

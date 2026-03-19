@@ -26,12 +26,12 @@ export function generateDeviceIds(): DeviceIds {
 
 function getHeaders(ids: DeviceIds): Record<string, string> {
   return {
-    "user-agent": "Tinder Android Version 14.22.0",
-    "app-version": "4525",
+    "user-agent": "Tinder Android Version 15.20.0",
+    "app-version": "5200",
     "platform": "android",
     "platform-variant": "Google-Play",
-    "os-version": "30",
-    "tinder-version": "14.22.0",
+    "os-version": "34",
+    "tinder-version": "15.20.0",
     "store-variant": "Play-Store",
     "x-supported-image-formats": "webp",
     "accept-language": "en-US",
@@ -40,7 +40,7 @@ function getHeaders(ids: DeviceIds): Record<string, string> {
     "persistent-device-id": ids.deviceId,
     "app-session-id": ids.appSessionId,
     "install-id": ids.installId,
-    "app-session-time-elapsed": (Math.random() * 2).toFixed(3),
+    "app-session-time-elapsed": (Math.random() * 2 + 0.5).toFixed(3),
     "funnel-session-id": ids.funnelSessionId,
   };
 }
@@ -72,12 +72,13 @@ async function sendAuthRequest(payload: Record<string, unknown>, ids: DeviceIds,
     try {
       const { getProxyDispatcher } = await import("../../proxy");
       dispatcher = await getProxyDispatcher(ids.deviceId, phone);
+      console.log(`[tinder-auth] Proxy dispatcher: ${dispatcher ? "YES" : "NO"}, phone=${phone}, deviceId=${ids.deviceId}`);
     } catch (e) {
       console.warn("[tinder-auth] Failed to get proxy dispatcher:", e);
     }
   }
 
-  let res: Response;
+  let res!: Response;
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const fetchInit: any = {
@@ -91,7 +92,35 @@ async function sendAuthRequest(payload: Record<string, unknown>, ids: DeviceIds,
     if (dispatcher) {
       fetchInit.dispatcher = dispatcher;
       const undici = await import("undici");
-      res = await undici.fetch(AUTH_URL, fetchInit) as unknown as Response;
+      // Try proxy up to 2 times, then fall back to direct
+      let proxyOk = false;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          res = await undici.fetch(AUTH_URL, fetchInit) as unknown as Response;
+          proxyOk = true;
+          break;
+        } catch (proxyErr) {
+          console.warn(`[tinder-auth] Proxy attempt ${attempt + 1}/2 failed:`, proxyErr instanceof Error ? proxyErr.message : proxyErr);
+          if (attempt < 1) await new Promise(r => setTimeout(r, 1000));
+        }
+      }
+      if (!proxyOk) {
+        // Fall back to direct connection — better to try without proxy than fail entirely
+        console.warn("[tinder-auth] Proxy failed 5 times, falling back to direct connection");
+        try {
+          res = await fetch(AUTH_URL, {
+            method: "POST",
+            headers: {
+              ...getHeaders(ids),
+              "content-length": String(buffer.length),
+            },
+            body: buffer,
+          });
+        } catch (directErr) {
+          const msg = directErr instanceof Error ? directErr.message : String(directErr);
+          return { step: "error", message: `Proxy and direct connection both failed: ${msg}` };
+        }
+      }
     } else {
       res = await fetch(AUTH_URL, fetchInit);
     }
@@ -205,33 +234,146 @@ async function sendAuthRequest(payload: Record<string, unknown>, ids: DeviceIds,
 }
 
 export async function sendPhoneCode(phone: string, ids: DeviceIds): Promise<AuthStep> {
-  return sendAuthRequest({ phone: { phone } }, ids, phone);
+  const result = await sendAuthRequest({ phone: { phone } }, ids, phone);
+  console.log(`[tinder-auth] sendPhoneCode v3 result: step=${result.step}, smsSent=${(result as any).smsSent}, refreshToken=${(result as any).refreshToken ? "yes" : "empty"}`);
+
+  // If v3 says sent but smsSent is false, or if it errors, try v2 REST as fallback
+  if (result.step === "otp_sent" && (result as any).smsSent === false) {
+    console.log("[tinder-auth] v3 smsSent=false, trying v2 REST fallback for send-code...");
+    return sendPhoneCodeV2(phone, ids);
+  }
+  if (result.step === "error") {
+    console.log("[tinder-auth] v3 send-code failed, trying v2 REST fallback...");
+    return sendPhoneCodeV2(phone, ids);
+  }
+  return result;
+}
+
+async function sendPhoneCodeV2(phone: string, ids: DeviceIds): Promise<AuthStep> {
+  const { proxiedFetch } = await import("../../proxy");
+  try {
+    const res = await proxiedFetch(
+      "https://api.gotinder.com/v2/auth/sms/send?auth_type=sms",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": "Tinder Android Version 15.20.0",
+          "app-version": "5200",
+          "platform": "android",
+          "os-version": "34",
+          "persistent-device-id": ids.deviceId,
+          "install-id": ids.installId,
+          "app-session-id": ids.appSessionId,
+        },
+        body: JSON.stringify({ phone_number: phone }),
+      },
+      { sessionId: ids.deviceId, phone }
+    );
+    const data = await res.json();
+    console.log("[tinder-auth] v2 send-code response:", JSON.stringify(data));
+    if (data?.data?.sms_sent) {
+      return { step: "otp_sent", refreshToken: "", phone, otpLength: 6, smsSent: true };
+    }
+    return { step: "error", message: `v2 send-code: sms_sent=${data?.data?.sms_sent}, full=${JSON.stringify(data)}` };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { step: "error", message: `v2 send-code failed: ${msg}` };
+  }
 }
 
 export async function verifyPhoneOtp(phone: string, otp: string, refreshToken: string, ids: DeviceIds): Promise<AuthStep> {
+  console.log(`[tinder-auth] verifyPhoneOtp: phone=${phone}, otp=${otp}, hasRT=${!!refreshToken}, rtLen=${refreshToken?.length}, deviceId=${ids.deviceId}`);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const phoneOtp: any = { phone: { value: phone }, otp };
+  // Only include refreshToken if we actually have one (empty wrapper causes 40120)
   if (refreshToken) phoneOtp.refreshToken = { value: refreshToken };
-  return sendAuthRequest({ phoneOtp }, ids, phone);
+  const result = await sendAuthRequest({ phoneOtp }, ids, phone);
+
+  // If v3 protobuf fails, try v2 REST API as fallback
+  if (result.step === "error" && (result.message.includes("41201") || result.message.includes("40120"))) {
+    console.log(`[tinder-auth] v3 protobuf failed, trying v2 REST fallback...`);
+    return verifyPhoneOtpV2(phone, otp, refreshToken, ids);
+  }
+  return result;
 }
 
-export async function verifyEmailOtp(otp: string, refreshToken: string, email: string, phone: string, ids: DeviceIds): Promise<AuthStep> {
+async function verifyPhoneOtpV2(phone: string, otp: string, _refreshToken: string, ids: DeviceIds): Promise<AuthStep> {
+  const { proxiedFetch } = await import("../../proxy");
+  try {
+    const res = await proxiedFetch(
+      "https://api.gotinder.com/v2/auth/sms/validate?auth_type=sms",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": "Tinder Android Version 15.20.0",
+          "app-version": "5200",
+          "platform": "android",
+          "os-version": "34",
+          "persistent-device-id": ids.deviceId,
+          "install-id": ids.installId,
+          "app-session-id": ids.appSessionId,
+        },
+        body: JSON.stringify({
+          otp_code: otp,
+          phone_number: phone,
+          is_update: false,
+        }),
+      },
+      { sessionId: ids.deviceId, phone }
+    );
+    const text = await res.text();
+    console.log(`[tinder-auth] v2 REST response (${res.status}, ${text.length} bytes):`, text.slice(0, 500));
+
+    if (!text || text.length === 0) {
+      return { step: "error", message: `Tinder v2 returned empty response (HTTP ${res.status})` };
+    }
+
+    let data: Record<string, unknown>;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return { step: "error", message: `Tinder v2 non-JSON response (HTTP ${res.status}): ${text.slice(0, 200)}` };
+    }
+
+    if (!res.ok) {
+      return { step: "error", message: `Tinder v2 API error (${res.status}): ${JSON.stringify(data).slice(0, 200)}` };
+    }
+
+    // v2 returns { data: { refresh_token, validated, ... } } on success
+    const d = data.data as Record<string, unknown> | undefined;
+    if (d?.validated === true || d?.refresh_token) {
+      if (typeof d._id === "string" && typeof d.api_token === "string") {
+        return { step: "login_success", authToken: d.api_token as string, refreshToken: (d.refresh_token as string) || "", userId: d._id as string };
+      }
+      return { step: "otp_sent", refreshToken: (d.refresh_token as string) || "", phone, otpLength: 6, smsSent: true };
+    }
+    return { step: "error", message: `Tinder v2 unexpected: ${JSON.stringify(data).slice(0, 200)}` };
+  } catch (err) {
+    return { step: "error", message: `Tinder v2 fallback failed: ${err instanceof Error ? err.message : String(err)}` };
+  }
+}
+
+export async function verifyEmailOtp(otp: string, refreshToken: string, _email: string, phone: string, ids: DeviceIds): Promise<AuthStep> {
+  // Note: do NOT include the email field — Tinder rejects it (error 50000).
+  // The refreshToken alone is sufficient to link the email OTP to the session.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const emailOtp: any = { otp };
   if (refreshToken) emailOtp.refreshToken = { value: refreshToken };
-  if (email) emailOtp.email = { value: email };
   return sendAuthRequest({ emailOtp }, ids, phone);
 }
 
 export async function validateTinderToken(token: string): Promise<{ valid: boolean; name?: string; error?: string }> {
   try {
-    const res = await fetch("https://api.gotinder.com/v2/profile?include=user", {
+    const { proxiedFetch } = await import("../../proxy");
+    const res = await proxiedFetch("https://api.gotinder.com/v2/profile?include=user", {
       headers: {
         "Content-Type": "application/json",
-        "User-Agent": "Tinder Android Version 14.22.0",
+        "User-Agent": "Tinder Android Version 15.20.0",
         "X-Auth-Token": token,
         platform: "android",
-        "app-version": "4525",
+        "app-version": "5200",
       },
     });
     if (!res.ok) return { valid: false, error: `Invalid token (${res.status})` };

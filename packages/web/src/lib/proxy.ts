@@ -102,3 +102,41 @@ export async function getProxyDispatcher(
   console.log(`[proxy] New auth agent: country=${country}, session=${sessionId}`);
   return agent;
 }
+
+/**
+ * Fetch through the residential proxy. Works for all platforms.
+ * If no PROXY_URL is set, falls back to plain fetch.
+ *
+ * @param url - The URL to fetch
+ * @param init - Standard RequestInit options
+ * @param opts - Proxy options: sessionId (for sticky sessions), phone (for country targeting)
+ */
+export async function proxiedFetch(
+  url: string,
+  init?: RequestInit,
+  opts?: { sessionId?: string; phone?: string }
+): Promise<Response> {
+  const sessionId = opts?.sessionId || "default";
+  const phone = opts?.phone || "1"; // default to US if no phone
+
+  const dispatcher = await getProxyDispatcher(sessionId, phone);
+
+  if (dispatcher) {
+    const undici = await import("undici");
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return await (undici.fetch(url, { ...init, dispatcher } as any) as unknown as Promise<Response>);
+      } catch (proxyErr) {
+        lastErr = proxyErr;
+        console.warn(`[proxy] Proxied fetch attempt ${attempt + 1}/2 failed for ${url}:`, proxyErr instanceof Error ? proxyErr.message : proxyErr);
+        if (attempt < 1) await new Promise(r => setTimeout(r, 500));
+      }
+    }
+    console.warn(`[proxy] Proxy failed for ${url}, falling back to direct`);
+    return fetch(url, init);
+  }
+
+  return fetch(url, init);
+}

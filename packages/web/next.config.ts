@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  serverExternalPackages: ["protobufjs", "@phala/dstack-sdk", "undici", "https-proxy-agent", "agent-base", "global-agent"],
+  serverExternalPackages: ["protobufjs", "@phala/dstack-sdk", "undici", "https-proxy-agent", "agent-base", "global-agent", "puppeteer-core"],
   transpilePackages: ["@rizz/shared"],
 };
 

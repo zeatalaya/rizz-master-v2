@@ -86,13 +86,9 @@ export default function Dashboard() {
       <header className="sticky top-0 z-50 backdrop-blur-xl bg-[#111]/80 border-b border-white/5">
         <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: gradient }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
-                <path d="M11.7 2c-.1 0-.3.1-.4.2C8 5.3 7.2 7.3 7.8 9.4c.1.3 0 .5-.2.7-.2.1-.5.1-.7 0C5.5 9 4.6 7.2 4.5 5.3c0-.2-.1-.3-.3-.3s-.3.1-.4.2C1.5 8.4.5 12 2.1 15.3c1.5 3 4.7 4.8 8.1 4.7 3.4.1 6.5-1.7 8.1-4.7 1.7-3.4.5-7.1-2-10.1-.6-.7-1.3-1.4-2-2-.1-.1-.2-.2-.4-.2-.1 0-.3.1-.3.3-.1 1.6-.7 3.2-1.7 4.4-.1.1-.2.2-.4.2-.2 0-.3-.1-.4-.2-.4-.6-.5-1.3-.3-2-.1-1.3-.2-2.5-.8-3.5-.1-.1-.2-.2-.3-.2z" />
-              </svg>
-            </div>
+            <img src="/smoothly-logo.svg" alt="Smoothly" className="w-8 h-8" />
             <span className="font-bold text-lg">
-              <span style={{ background: gradient, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+              <span style={{ background: "var(--smoothly-gradient)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
                 Rizz Master
               </span>
             </span>
@@ -302,7 +298,9 @@ function CriterionRow({ criterion, gradient }: { criterion: RizzCriterion; gradi
         <div className="flex items-center justify-between mb-1">
           <span className="text-xs text-gray-300">{criterion.label}</span>
           <span className={`text-xs font-mono ${criterion.passed ? "text-green-400" : "text-gray-500"}`}>
-            {criterion.actual}/{criterion.required}
+            {"isPercentage" in criterion && criterion.isPercentage
+              ? `${criterion.actual}%/${criterion.required}%`
+              : `${criterion.actual}/${criterion.required}`}
           </span>
         </div>
         <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">

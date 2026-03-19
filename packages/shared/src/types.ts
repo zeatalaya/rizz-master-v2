@@ -11,7 +11,7 @@ export type AuthStep =
   | { step: "otp_sent"; refreshToken: string; phone: string; otpLength: number; smsSent: boolean }
   | { step: "email_required"; refreshToken: string; email: string; otpLength: number }
   | { step: "login_success"; authToken: string; refreshToken: string; userId: string }
-  | { step: "captcha_required"; referenceToken: string }
+  | { step: "captcha_required"; referenceToken: string; phone?: string }
   | { step: "google_needs_email"; refreshToken: string; email: string }
   | { step: "google_no_account"; refreshToken: string; email: string }
   | { step: "error"; message: string };
@@ -48,6 +48,7 @@ export interface RizzCriterion {
   actual: number;
   passed: boolean;
   icon: string;
+  isPercentage?: boolean;
 }
 
 export interface AttestationResult {

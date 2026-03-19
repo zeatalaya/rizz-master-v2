@@ -66,8 +66,8 @@ export async function attestRizzMasterResult(result: {
   userName: string;
   isRizzMaster: boolean;
   totalMatches: number;
-  conversationsStartedWithReply: number;
-  likesYouCount: number;
+  conversationsYouStarted: number;
+  replyRate: number;
   platform: string;
 }): Promise<AttestationResult> {
   const payload = JSON.stringify({
@@ -77,9 +77,9 @@ export async function attestRizzMasterResult(result: {
     userName: result.userName,
     isRizzMaster: result.isRizzMaster,
     criteria: {
-      matches: { actual: result.totalMatches, required: 10, passed: result.totalMatches >= 10 },
-      conversations: { actual: result.conversationsStartedWithReply, required: 5, passed: result.conversationsStartedWithReply >= 5 },
-      likes: { actual: result.likesYouCount, required: 50, passed: result.likesYouCount >= 50 },
+      matches: { actual: result.totalMatches, required: 40, passed: result.totalMatches >= 40 },
+      conversations: { actual: result.conversationsYouStarted, required: 18, passed: result.conversationsYouStarted >= 18 },
+      replyRate: { actual: Math.round(result.replyRate), required: 35, passed: result.replyRate >= 35 },
     },
     evaluatedAt: new Date().toISOString(),
   });

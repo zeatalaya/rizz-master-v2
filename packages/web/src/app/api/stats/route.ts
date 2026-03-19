@@ -28,7 +28,12 @@ export async function GET(req: NextRequest) {
 
       // Cache user name if needed
       const adapter = getAdapter(platform);
-      const stats = await adapter.fetchStats(token);
+      const extra: Record<string, string> = {};
+      if (session.deviceId) extra.deviceId = session.deviceId;
+      if (session.appSessionId) extra.appSessionId = session.appSessionId;
+      if (session.installId) extra.installId = session.installId;
+      if (session.funnelSessionId) extra.funnelSessionId = session.funnelSessionId;
+      const stats = await adapter.fetchStats(token, extra);
 
       if (stats.myName) {
         session.userName = stats.myName;
@@ -36,18 +41,19 @@ export async function GET(req: NextRequest) {
       }
 
       // Attempt TEE attestation
+      const replyRate = stats.replyRate ?? 0;
       let attestation = null;
       try {
         attestation = await attestRizzMasterResult({
           userId: stats.myId,
           userName: stats.myName,
           isRizzMaster:
-            stats.totalMatches >= 10 &&
-            stats.conversationsStartedWithReply >= 5 &&
-            stats.likesYouCount >= 50,
+            stats.totalMatches >= 40 &&
+            stats.conversationsYouStarted >= 18 &&
+            replyRate >= 35,
           totalMatches: stats.totalMatches,
-          conversationsStartedWithReply: stats.conversationsStartedWithReply,
-          likesYouCount: stats.likesYouCount,
+          conversationsYouStarted: stats.conversationsYouStarted,
+          replyRate,
           platform,
         });
         console.log(`[stats] TEE attestation succeeded for ${platform}`);
@@ -62,18 +68,19 @@ export async function GET(req: NextRequest) {
     const adapter = getAdapter(platform);
     const stats = await adapter.fetchStats(token);
 
+    const mobileReplyRate = stats.replyRate ?? 0;
     let attestation = null;
     try {
       attestation = await attestRizzMasterResult({
         userId: stats.myId,
         userName: stats.myName,
         isRizzMaster:
-          stats.totalMatches >= 10 &&
-          stats.conversationsStartedWithReply >= 5 &&
-          stats.likesYouCount >= 50,
+          stats.totalMatches >= 40 &&
+          stats.conversationsYouStarted >= 18 &&
+          mobileReplyRate >= 35,
         totalMatches: stats.totalMatches,
-        conversationsStartedWithReply: stats.conversationsStartedWithReply,
-        likesYouCount: stats.likesYouCount,
+        conversationsYouStarted: stats.conversationsYouStarted,
+        replyRate: mobileReplyRate,
         platform,
       });
     } catch {

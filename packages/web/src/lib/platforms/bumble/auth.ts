@@ -1,11 +1,13 @@
 /**
  * Bumble auth adapter.
- * Uses JSON-RPC-like protocol via mwebapi.phtml with MD5 signing.
+ * Uses Badoo protocol via mwebapi.phtml with MD5 signing.
+ * Updated March 2026 — correct message types: 678 (submit phone) and 680 (check PIN).
  */
 
 import { createHash } from "crypto";
 import type { DeviceIds, AuthStep } from "@rizz/shared";
 import type { PlatformAuthAdapter } from "../types";
+import { proxiedFetch } from "../../proxy";
 
 const BUMBLE_API = "https://bumble.com/mwebapi.phtml";
 const SIGNING_SECRET = "whitetelevisionbulbelectionroofhorseflying";
@@ -14,15 +16,49 @@ function signBody(body: string): string {
   return createHash("md5").update(body + SIGNING_SECRET).digest("hex");
 }
 
-function bumbleMessage(messageType: number, messageData: Record<string, unknown>) {
+function bumbleHeaders(bodyStr: string, messageType: number, sessionCookie?: string): Record<string, string> {
+  const h: Record<string, string> = {
+    "Content-Type": "application/json",
+    "User-Agent": "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+    "X-Pingback": signBody(bodyStr),
+    "X-Message-type": String(messageType),
+    "x-use-session-cookie": "1",
+    "Origin": "https://bumble.com",
+    "Referer": "https://bumble.com/get-started",
+    "Accept": "application/json",
+    "Accept-Language": "en-US,en;q=0.9",
+  };
+  if (sessionCookie) {
+    h["Cookie"] = `session=${sessionCookie}; session_cookie_name=session`;
+  }
+  return h;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function bumblePost(body: Record<string, unknown>, messageType: number, sessionCookie?: string, proxyOpts?: { sessionId?: string; phone?: string }): Promise<{ json: any; setCookie?: string }> {
+  const bodyStr = JSON.stringify(body);
+  const headers = bumbleHeaders(bodyStr, messageType, sessionCookie);
+
+  const res = await proxiedFetch(BUMBLE_API, {
+    method: "POST",
+    headers,
+    body: bodyStr,
+  }, proxyOpts);
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Bumble API ${res.status}: ${text}`);
+  }
+
+  // Capture session cookie from response
+  const setCookie = res.headers.get("set-cookie") || undefined;
+  const json = await res.json();
+  return { json, setCookie };
+}
+
+function makeMessage(messageType: number, data: Record<string, unknown>) {
   return {
-    body: [
-      {
-        message_type: messageType,
-        server_app_startup: messageType === 2 ? messageData : undefined,
-        ...messageData,
-      },
-    ],
+    body: [{ message_type: messageType, ...data }],
     message_type: messageType,
     version: 1,
     is_background: false,
@@ -30,68 +66,59 @@ function bumbleMessage(messageType: number, messageData: Record<string, unknown>
   };
 }
 
-async function bumblePost(body: Record<string, unknown>, sessionCookie?: string): Promise<unknown> {
-  const bodyStr = JSON.stringify(body);
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    "User-Agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-    "X-Pingback": signBody(bodyStr),
-  };
-  if (sessionCookie) {
-    headers["Cookie"] = `session=${sessionCookie}`;
-  }
-
-  const res = await fetch(BUMBLE_API, {
-    method: "POST",
-    headers,
-    body: bodyStr,
-  });
-
-  if (!res.ok) {
-    throw new Error(`Bumble API ${res.status}: ${await res.text()}`);
-  }
-
-  return res.json();
-}
-
-async function sendBumbleCode(phone: string, _ids: DeviceIds): Promise<AuthStep> {
+async function sendBumbleCode(phone: string, ids: DeviceIds): Promise<AuthStep> {
   try {
-    // Step 1: App startup to get initial session
-    await bumblePost(bumbleMessage(2, {
-      app_build: "MoxieWebapp",
-      app_name: "mwebapi",
-      app_version: "1.0.0",
-      can_send_sms: false,
-      user_agent: "Mozilla/5.0",
-      screen_width: 375,
-      screen_height: 812,
-      language: 0,
-      is_cold_start: true,
-      supported_features: [362],
-      supported_minor_features: [],
-      supported_notifications: [],
-      dev_features: [],
-      first_launch: true,
-    }));
-
-    // Step 2: Send phone number for OTP
     const cleanPhone = phone.replace(/\D/g, "");
-    const msg = bumbleMessage(15, {
-      phone_number: cleanPhone,
-      screen_context: { screen: 10 },
-    });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const resp = await bumblePost(msg) as any;
+    const proxyOpts = { sessionId: ids.deviceId, phone: cleanPhone };
 
-    // Check for errors in response
-    const body = resp?.body?.[0];
-    if (body?.error_code && body.error_code !== 0) {
-      return { step: "error", message: `Bumble error: ${body.error_message || `code ${body.error_code}`}` };
+    // Step 1: App startup to get initial session
+    const startupMsg = makeMessage(2, {
+      server_app_startup: {
+        app_build: "MoxieWebapp",
+        app_name: "moxie",
+        app_version: "1.0.0",
+        can_send_sms: false,
+        user_agent: "Mozilla/5.0",
+        screen_width: 375,
+        screen_height: 812,
+        language: 0,
+        is_cold_start: true,
+        app_platform_type: 5,
+        app_product_type: 400,
+        supported_features: [362],
+        supported_minor_features: [],
+        supported_notifications: [],
+        dev_features: [],
+        first_launch: true,
+      },
+    });
+    const startupResp = await bumblePost(startupMsg, 2, undefined, proxyOpts);
+    console.log("[bumble-auth] Startup done, got session cookie:", !!startupResp.setCookie);
+
+    // Extract session cookie
+    let sessionCookie = "";
+    if (startupResp.setCookie) {
+      const match = startupResp.setCookie.match(/session=([^;]+)/);
+      if (match) sessionCookie = match[1];
+    }
+
+    // Step 2: Submit phone number (message type 678)
+    const phoneMsg = makeMessage(678, {
+      server_submit_phone_number: {
+        phone: cleanPhone.startsWith("+") ? cleanPhone : `+${cleanPhone}`,
+      },
+    });
+    const phoneResp = await bumblePost(phoneMsg, 678, sessionCookie, proxyOpts);
+    const phoneBody = phoneResp.json?.body?.[0];
+    console.log("[bumble-auth] Phone submit response type:", phoneBody?.message_type, "error:", phoneBody?.error_code);
+
+    if (phoneBody?.error_code && phoneBody.error_code !== 0) {
+      return { step: "error", message: `Bumble error: ${phoneBody.error_message || `code ${phoneBody.error_code}`}` };
     }
 
     return {
       step: "otp_sent",
-      refreshToken: "",
+      refreshToken: sessionCookie, // Store session cookie for verify step
       phone: cleanPhone,
       otpLength: 6,
       smsSent: true,
@@ -101,35 +128,44 @@ async function sendBumbleCode(phone: string, _ids: DeviceIds): Promise<AuthStep>
   }
 }
 
-async function verifyBumbleCode(phone: string, otp: string, _refreshToken: string, _ids: DeviceIds): Promise<AuthStep> {
+async function verifyBumbleCode(phone: string, otp: string, refreshToken: string, ids: DeviceIds): Promise<AuthStep> {
   try {
     const cleanPhone = phone.replace(/\D/g, "");
-    const msg = bumbleMessage(16, {
-      phone_number: cleanPhone,
-      verification_code: otp,
-      screen_context: { screen: 11 },
+    const proxyOpts = { sessionId: ids.deviceId, phone: cleanPhone };
+    const sessionCookie = refreshToken; // Session cookie stored from send step
+
+    // Step 3: Check phone PIN (message type 680)
+    const pinMsg = makeMessage(680, {
+      server_check_phone_pin: {
+        pin: otp,
+      },
     });
+    const pinResp = await bumblePost(pinMsg, 680, sessionCookie, proxyOpts);
+    const pinBody = pinResp.json?.body?.[0];
+    console.log("[bumble-auth] PIN check response type:", pinBody?.message_type, "error:", pinBody?.error_code);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const resp = await bumblePost(msg) as any;
-    const body = resp?.body?.[0];
-
-    if (body?.error_code && body.error_code !== 0) {
-      return { step: "error", message: `Bumble verify error: ${body.error_message || `code ${body.error_code}`}` };
+    if (pinBody?.error_code && pinBody.error_code !== 0) {
+      return { step: "error", message: `Bumble verify error: ${pinBody.error_message || `code ${pinBody.error_code}`}` };
     }
 
-    // Extract session from response or cookies
-    const sessionToken = body?.access_token || body?.session_id || "";
+    // Extract session from response — could be in cookie or body
+    let finalSession = sessionCookie;
+    if (pinResp.setCookie) {
+      const match = pinResp.setCookie.match(/session=([^;]+)/);
+      if (match) finalSession = match[1];
+    }
+    const accessToken = pinBody?.access_token || pinBody?.session_id || finalSession;
 
-    if (!sessionToken) {
-      return { step: "error", message: "Bumble: No session token in verify response" };
+    if (!accessToken) {
+      const keys = pinBody ? Object.keys(pinBody).join(",") : "empty";
+      return { step: "error", message: `Bumble: No session token. Response keys: ${keys}` };
     }
 
     return {
       step: "login_success",
-      authToken: sessionToken,
+      authToken: accessToken,
       refreshToken: "",
-      userId: body?.user_id || "",
+      userId: pinBody?.user_id || "",
     };
   } catch (err) {
     return { step: "error", message: `Bumble verify failed: ${err instanceof Error ? err.message : String(err)}` };
@@ -143,10 +179,9 @@ export const bumbleAuthAdapter: PlatformAuthAdapter = {
 
 export async function validateBumbleToken(token: string): Promise<{ valid: boolean; name?: string; error?: string }> {
   try {
-    const msg = bumbleMessage(403, {});
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const resp = await bumblePost(msg, token) as any;
-    const body = resp?.body?.[0];
+    const msg = makeMessage(403, {});
+    const resp = await bumblePost(msg, 403, token, { sessionId: "validate" });
+    const body = resp.json?.body?.[0];
 
     if (body?.error_code && body.error_code !== 0) {
       return { valid: false, error: `Invalid session (${body.error_code})` };

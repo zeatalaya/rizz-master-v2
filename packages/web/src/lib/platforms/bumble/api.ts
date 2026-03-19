@@ -1,11 +1,13 @@
 /**
  * Bumble stats API adapter.
- * Uses session cookie + MD5-signed JSON requests.
+ * Uses session cookie + MD5-signed JSON requests via Badoo protocol.
+ * Updated March 2026 — improved headers.
  */
 
 import { createHash } from "crypto";
 import type { PlatformStats, MatchSummary } from "@rizz/shared";
 import type { PlatformAdapter } from "../types";
+import { proxiedFetch } from "../../proxy";
 
 const BUMBLE_API = "https://bumble.com/mwebapi.phtml";
 const SIGNING_SECRET = "whitetelevisionbulbelectionroofhorseflying";
@@ -24,13 +26,18 @@ async function bumblePost(messageType: number, data: Record<string, unknown>, se
   };
   const bodyStr = JSON.stringify(body);
 
-  const res = await fetch(BUMBLE_API, {
+  const res = await proxiedFetch(BUMBLE_API, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "User-Agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+      "User-Agent": "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
       "X-Pingback": signBody(bodyStr),
-      "Cookie": `session=${sessionCookie}`,
+      "X-Message-type": String(messageType),
+      "x-use-session-cookie": "1",
+      "Origin": "https://bumble.com",
+      "Referer": "https://bumble.com/",
+      "Accept": "application/json",
+      "Cookie": `session=${sessionCookie}; session_cookie_name=session`,
     },
     body: bodyStr,
   });
@@ -40,19 +47,19 @@ async function bumblePost(messageType: number, data: Record<string, unknown>, se
 }
 
 async function fetchBumbleStats(token: string): Promise<PlatformStats> {
-  // Get user profile (msg_type 403)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let profileResp: any;
   let myName = "User";
   let myId = "unknown";
 
+  // Get user profile (msg_type 403)
   try {
-    profileResp = await bumblePost(403, {}, token);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const profileResp = await bumblePost(403, {}, token) as any;
     const user = profileResp?.body?.[0]?.client_user || profileResp?.body?.[0]?.user;
     myName = user?.name || "User";
     myId = user?.user_id || "unknown";
-  } catch {
-    // Profile fetch may fail — continue with defaults
+  } catch (err) {
+    console.error("[bumble-api] profile failed:", err instanceof Error ? err.message : err);
   }
 
   // Get conversations (msg_type 245)

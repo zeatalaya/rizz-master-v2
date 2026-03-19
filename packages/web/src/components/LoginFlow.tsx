@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import type { Platform } from "@rizz/shared";
 import { PLATFORM_CONFIGS } from "@rizz/shared";
+import BrowserLogin from "./BrowserLogin";
 
 interface LoginFlowProps {
   platform: Platform;
@@ -10,13 +11,14 @@ interface LoginFlowProps {
   onBack: () => void;
 }
 
-type Step = "phone" | "otp" | "email_otp" | "verifying" | "token";
+type Step = "phone" | "captcha" | "otp" | "email_otp" | "verifying" | "token" | "browser";
 
 interface AuthState {
   refreshToken: string;
   phone: string;
   otpLength: number;
   email?: string;
+  captchaSiteKey?: string;
   deviceIds?: {
     deviceId: string;
     appSessionId: string;
@@ -36,6 +38,7 @@ export default function LoginFlow({ platform, onAuthenticated, onBack }: LoginFl
   const [manualToken, setManualToken] = useState("");
   const [emailRetries, setEmailRetries] = useState(0);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const captchaSentRef = useRef(false);
 
   const startCooldown = (seconds: number) => {
     setResendCooldown(seconds);
@@ -76,6 +79,19 @@ export default function LoginFlow({ platform, onAuthenticated, onBack }: LoginFl
           return;
         }
         throw new Error(data.error || "Failed to send code");
+      }
+
+      // Hinge returns captcha_required — show reCAPTCHA widget
+      if (data.step === "captcha_required") {
+        setAuthState({
+          refreshToken: "",
+          phone: data.phone || phone,
+          otpLength: 6,
+          captchaSiteKey: data.referenceToken,
+          deviceIds: data._deviceIds,
+        });
+        setStep("captcha");
+        return;
       }
 
       setAuthState({
@@ -190,6 +206,16 @@ export default function LoginFlow({ platform, onAuthenticated, onBack }: LoginFl
     : platform === "bumble" ? "Paste your session cookie here"
     : "Paste your Bearer token here";
 
+  // Browser login is rendered standalone (has its own card)
+  if (step === "browser") {
+    return (
+      <BrowserLogin
+        onAuthenticated={onAuthenticated}
+        onBack={() => { setStep("phone"); setError(null); }}
+      />
+    );
+  }
+
   return (
     <div className="max-w-sm mx-auto">
       <div className="rounded-3xl bg-[#1a1a1a] border border-white/5 p-8">
@@ -254,9 +280,84 @@ export default function LoginFlow({ platform, onAuthenticated, onBack }: LoginFl
                 onClick={() => { setStep("token"); setError(null); }}
                 className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
               >
-                Use token instead
+                Use token paste instead
               </button>
             </div>
+
+            {platform === "tinder" && (
+              <div className="text-center pt-1">
+                <button
+                  onClick={() => { setStep("browser"); setError(null); }}
+                  className="text-[10px] text-gray-600 hover:text-gray-400 transition-colors"
+                >
+                  Or login via browser
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* STEP 1b: reCAPTCHA (Hinge Firebase auth) */}
+        {step === "captcha" && authState?.captchaSiteKey && (
+          <div className="space-y-4">
+            <div className="text-center mb-4">
+              <h2 className="text-lg font-bold text-white">One more step</h2>
+              <p className="text-gray-500 text-xs mt-1">
+                Complete the verification to receive your SMS code
+              </p>
+            </div>
+
+            <RecaptchaWidget
+              siteKey={authState.captchaSiteKey}
+              onSolved={async (token) => {
+                if (captchaSentRef.current) return; // Prevent double submission
+                captchaSentRef.current = true;
+                setLoading(true);
+                setError(null);
+                try {
+                  const res = await fetch("/api/auth/send-code", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      phone: phone.startsWith("+") ? phone : `+${phone}`,
+                      platform,
+                      deviceIds: authState.deviceIds,
+                      recaptchaToken: token,
+                    }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok || data.step === "error") {
+                    throw new Error(data.error || "Failed to send SMS");
+                  }
+                  setAuthState((prev) => ({
+                    ...prev!,
+                    refreshToken: data.refreshToken || "",
+                    otpLength: data.otpLength || 6,
+                  }));
+                  setCode("");
+                  setStep("otp");
+                  startCooldown(30);
+                } catch (err) {
+                  captchaSentRef.current = false; // Allow retry
+                  setError(err instanceof Error ? err.message : "Failed to send code");
+                } finally {
+                  setLoading(false);
+                }
+              }}
+            />
+
+            {loading && (
+              <div className="flex justify-center py-2">
+                <Spinner text="Sending SMS..." />
+              </div>
+            )}
+
+            <button
+              onClick={() => { setStep("phone"); setError(null); captchaSentRef.current = false; }}
+              className="w-full text-xs text-gray-500 hover:text-gray-300 transition-colors"
+            >
+              Go back
+            </button>
           </div>
         )}
 
@@ -385,13 +486,13 @@ export default function LoginFlow({ platform, onAuthenticated, onBack }: LoginFl
           </div>
         )}
 
-        {/* Token paste fallback */}
+        {/* Token paste */}
         {step === "token" && (
           <div className="space-y-4">
             <div className="text-center mb-4">
               <h2 className="text-lg font-bold text-white">{config.tokenInstructions.title}</h2>
               <p className="text-gray-500 text-xs mt-1">
-                Paste your token from {config.name}
+                Log in to {config.name} in your own browser, then paste your token here
               </p>
             </div>
 
@@ -422,19 +523,45 @@ export default function LoginFlow({ platform, onAuthenticated, onBack }: LoginFl
                 ))}
               </ol>
               {config.tokenInstructions.code && (
-                <div className="bg-black/30 rounded-lg p-2 mt-1">
-                  <code className="text-[10px] text-green-400 font-mono break-all">
+                <div className="bg-black/30 rounded-lg p-2 mt-1 relative group">
+                  <code className="text-[10px] text-green-400 font-mono break-all select-all">
                     {config.tokenInstructions.code}
                   </code>
+                  <button
+                    onClick={() => navigator.clipboard?.writeText(config.tokenInstructions.code || "")}
+                    className="absolute top-1 right-1 p-1 rounded bg-white/5 hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Copy command"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                  </button>
                 </div>
               )}
             </div>
 
+            <div className="flex justify-between">
+              <button
+                onClick={onBack}
+                className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
+              >
+                Change platform
+              </button>
+              {platform === "tinder" && (
+                <button
+                  onClick={() => { setStep("browser"); setError(null); }}
+                  className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
+                >
+                  Use browser login
+                </button>
+              )}
+            </div>
             <button
               onClick={() => { setStep("phone"); setError(null); setManualToken(""); }}
               className="w-full text-xs text-gray-500 hover:text-gray-300 transition-colors"
             >
-              Back to phone verification
+              Try phone OTP instead
             </button>
           </div>
         )}
@@ -450,6 +577,64 @@ export default function LoginFlow({ platform, onAuthenticated, onBack }: LoginFl
   );
 }
 
+function RecaptchaWidget({ siteKey, onSolved }: { siteKey: string; onSolved: (token: string) => void }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const renderedRef = useRef(false);
+
+  const handleSolved = useCallback((token: string) => {
+    onSolved(token);
+  }, [onSolved]);
+
+  useEffect(() => {
+    if (renderedRef.current) return;
+    renderedRef.current = true;
+
+    const cbName = `__recaptchaCb_${Date.now()}`;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any)[cbName] = handleSolved;
+
+    const existingScript = document.querySelector('script[src*="recaptcha/api.js"]');
+    if (!existingScript) {
+      const script = document.createElement("script");
+      script.src = "https://www.google.com/recaptcha/api.js?render=explicit";
+      script.async = true;
+      document.head.appendChild(script);
+      script.onload = () => tryRender();
+    } else {
+      setTimeout(tryRender, 200);
+    }
+
+    function tryRender() {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const g = (window as any).grecaptcha;
+      if (g?.render && containerRef.current) {
+        try {
+          g.render(containerRef.current, {
+            sitekey: siteKey,
+            callback: cbName,
+            theme: "dark",
+          });
+        } catch {
+          // already rendered
+        }
+      } else {
+        setTimeout(tryRender, 500);
+      }
+    }
+
+    return () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (window as any)[cbName];
+    };
+  }, [siteKey, handleSolved]);
+
+  return (
+    <div className="flex justify-center py-2">
+      <div ref={containerRef} />
+    </div>
+  );
+}
+
 function Spinner({ text }: { text: string }) {
   return (
     <span className="flex items-center justify-center gap-2">
@@ -458,3 +643,4 @@ function Spinner({ text }: { text: string }) {
     </span>
   );
 }
+

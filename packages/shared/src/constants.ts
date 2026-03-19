@@ -1,12 +1,13 @@
 import type { Platform, PlatformStats, RizzCriterion } from "./types";
 
 export const RIZZ_CRITERIA = {
-  matches: { label: "Matches", required: 10, icon: "fire" },
-  conversations: { label: "Conversations started with replies", required: 5, icon: "chat" },
-  likes: { label: "Likes received", required: 50, icon: "heart" },
+  matches: { label: "Matches", required: 40, icon: "fire" },
+  conversations: { label: "Conversations started", required: 18, icon: "chat" },
+  replyRate: { label: "Reply rate", required: 35, icon: "heart", isPercentage: true },
 } as const;
 
 export function evaluateRizzMaster(stats: PlatformStats): { criteria: RizzCriterion[]; isRizzMaster: boolean } {
+  const replyRate = stats.replyRate ?? 0;
   const criteria: RizzCriterion[] = [
     {
       ...RIZZ_CRITERIA.matches,
@@ -15,13 +16,13 @@ export function evaluateRizzMaster(stats: PlatformStats): { criteria: RizzCriter
     },
     {
       ...RIZZ_CRITERIA.conversations,
-      actual: stats.conversationsStartedWithReply,
-      passed: stats.conversationsStartedWithReply >= RIZZ_CRITERIA.conversations.required,
+      actual: stats.conversationsYouStarted,
+      passed: stats.conversationsYouStarted >= RIZZ_CRITERIA.conversations.required,
     },
     {
-      ...RIZZ_CRITERIA.likes,
-      actual: stats.likesYouCount,
-      passed: stats.likesYouCount >= RIZZ_CRITERIA.likes.required,
+      ...RIZZ_CRITERIA.replyRate,
+      actual: Math.round(replyRate),
+      passed: replyRate >= RIZZ_CRITERIA.replyRate.required,
     },
   ];
 
@@ -51,14 +52,14 @@ export const PLATFORM_CONFIGS: Record<Platform, PlatformConfig> = {
     secondaryColor: "#FF5864",
     bgColor: "#FD297B",
     tokenInstructions: {
-      title: "Get your Tinder token",
+      title: "Paste your Tinder token",
       steps: [
-        "Open tinder.com and log in",
-        "Open DevTools (F12)",
-        "Go to Console and run:",
-        "Copy the result and paste above",
+        "Open tinder.com in your browser and log in",
+        "Press F12 (or \u2318+Option+I on Mac) to open DevTools",
+        "Go to the Console tab and paste the command below",
+        "Copy the token value and paste it above",
       ],
-      code: 'localStorage.getItem("TinderWeb/APIToken")',
+      code: `(async()=>{let t=localStorage.getItem("TinderWeb/APIToken");if(t)return t;return new Promise(r=>{let q=indexedDB.open("keyval-store");q.onsuccess=()=>{let s=q.result.transaction("keyval","readonly").objectStore("keyval").get("persist::mfa");s.onsuccess=()=>{let d=s.result;r(d?.authToken||"not found")};s.onerror=()=>r("not found")};q.onerror=()=>r("not found")})})()`,
     },
   },
   bumble: {

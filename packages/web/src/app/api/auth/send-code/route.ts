@@ -7,7 +7,7 @@ const VALID_PLATFORMS: Platform[] = ["tinder", "bumble", "hinge"];
 
 export async function POST(req: NextRequest) {
   try {
-    const { phone, platform, deviceIds: clientDeviceIds } = await req.json();
+    const { phone, platform, deviceIds: clientDeviceIds, recaptchaToken } = await req.json();
 
     if (!phone || typeof phone !== "string") {
       return NextResponse.json({ error: "Phone number is required" }, { status: 400 });
@@ -19,30 +19,31 @@ export async function POST(req: NextRequest) {
     const cleanPhone = phone.replace(/[\s()-]/g, "");
     const session = await getSession();
 
-    // Reuse existing device IDs if available, otherwise generate new ones
+    // Reuse client-provided device IDs for resends, otherwise generate fresh
     let ids: DeviceIds;
     if (clientDeviceIds?.deviceId) {
       ids = clientDeviceIds;
-    } else if (session.deviceId) {
-      ids = {
-        deviceId: session.deviceId,
-        appSessionId: session.appSessionId || "",
-        installId: session.installId || "",
-        funnelSessionId: session.funnelSessionId || "",
-      };
     } else {
       ids = generateDeviceIds(platform);
     }
 
-    const authAdapter = getAuthAdapter(platform);
-    let result = await authAdapter.sendCode(cleanPhone, ids);
+    let result;
 
-    // On transient error, retry ONCE
-    if (result.step === "error") {
-      const msg = result.message;
-      if (msg.includes("42901") || msg.includes("fetch failed")) {
-        console.log(`[send-code] Transient error on ${platform}, retrying once...`);
-        result = await authAdapter.sendCode(cleanPhone, ids);
+    // Hinge Phase 2: reCAPTCHA solved, send SMS via Firebase
+    if (platform === "hinge" && recaptchaToken) {
+      const { sendHingeCodeWithCaptcha } = await import("@/lib/platforms/hinge/auth");
+      result = await sendHingeCodeWithCaptcha(cleanPhone, recaptchaToken);
+    } else {
+      const authAdapter = getAuthAdapter(platform);
+      result = await authAdapter.sendCode(cleanPhone, ids);
+
+      // On transient error, retry ONCE
+      if (result.step === "error") {
+        const msg = result.message;
+        if (msg.includes("42901") || msg.includes("fetch failed")) {
+          console.log(`[send-code] Transient error on ${platform}, retrying once...`);
+          result = await authAdapter.sendCode(cleanPhone, ids);
+        }
       }
     }
 
@@ -53,6 +54,8 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+
+    console.log(`[send-code] ${platform} result:`, JSON.stringify(result));
 
     // Store auth state in session
     session.phone = cleanPhone;

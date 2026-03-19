@@ -1,27 +1,33 @@
 /**
  * Hinge stats API adapter.
  * REST-based with Bearer token auth.
+ * Updated March 2026 — requires X-App-Version header.
  */
 
 import type { PlatformStats, MatchSummary } from "@rizz/shared";
 import type { PlatformAdapter } from "../types";
+import { proxiedFetch } from "../../proxy";
 
 const HINGE_API = "https://prod-api.hingeaws.net";
+const HINGE_APP_VERSION = "9.112.0";
 
 function hingeHeaders(token: string, extra?: Record<string, string>): Record<string, string> {
   const h: Record<string, string> = {
     "Content-Type": "application/json",
-    "User-Agent": "Hinge/9.0.0 (Android; 13)",
+    "User-Agent": `Hinge/${HINGE_APP_VERSION} (Android; 14; SM-S918B)`,
+    "x-app-version": HINGE_APP_VERSION,
     "Authorization": `Bearer ${token}`,
     "x-device-platform": "android",
+    "accept-language": "en-US",
   };
   if (extra?.sessionId) h["x-session-id"] = extra.sessionId;
   if (extra?.deviceId) h["x-device-id"] = extra.deviceId;
+  if (extra?.installId) h["x-install-id"] = extra.installId;
   return h;
 }
 
 async function hingeGet(path: string, token: string, extra?: Record<string, string>): Promise<unknown> {
-  const res = await fetch(`${HINGE_API}${path}`, {
+  const res = await proxiedFetch(`${HINGE_API}${path}`, {
     headers: hingeHeaders(token, extra),
   });
   if (!res.ok) {
@@ -41,8 +47,8 @@ async function fetchHingeStats(token: string, extra?: Record<string, string>): P
     const profile = await hingeGet("/user/v2/public", token, extra) as any;
     myName = profile?.firstName || profile?.name || "User";
     myId = profile?.identityId || profile?.id || "unknown";
-  } catch {
-    // Continue with defaults
+  } catch (err) {
+    console.error("[hinge-api] profile failed:", err instanceof Error ? err.message : err);
   }
 
   // Get likes / standouts count
@@ -63,7 +69,6 @@ async function fetchHingeStats(token: string, extra?: Record<string, string>): P
     const data = await hingeGet("/rec/v2", token, extra) as any;
     connections = data?.connections || data?.results || data?.conversations || [];
   } catch {
-    // Try alternate endpoint
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = await hingeGet("/message/conversations", token, extra) as any;

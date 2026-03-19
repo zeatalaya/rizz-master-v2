@@ -1,6 +1,9 @@
 @import "tailwindcss";
 
 :root {
+  --smoothly-red: #C0392B;
+  --smoothly-dark-red: #8B1A1A;
+  --smoothly-gradient: linear-gradient(135deg, #C0392B 0%, #E74C3C 50%, #C0392B 100%);
   --tinder-pink: #FD297B;
   --tinder-red: #FF5864;
   --tinder-orange: #FF655B;

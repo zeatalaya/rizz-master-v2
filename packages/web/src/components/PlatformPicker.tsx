@@ -32,11 +32,14 @@ export default function PlatformPicker({ onSelect }: PlatformPickerProps) {
   return (
     <div className="max-w-lg mx-auto">
       <div className="text-center mb-10">
-        <h1 className="text-4xl font-extrabold mb-3">
-          <span style={{ background: "var(--tinder-gradient)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-            Rizz Master
-          </span>
-        </h1>
+        <div className="flex items-center justify-center gap-3 mb-1">
+          <img src="/smoothly-logo.svg" alt="Smoothly" className="w-10 h-10" />
+          <h1 className="text-4xl font-extrabold">
+            <span style={{ background: "var(--smoothly-gradient)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+              Rizz Master
+            </span>
+          </h1>
+        </div>
         <p className="text-gray-500">Choose your platform to check your rizz</p>
       </div>
 

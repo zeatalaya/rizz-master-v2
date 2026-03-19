@@ -1,6 +1,6 @@
 services:
   rizz-master:
-    image: ghcr.io/zeatalaya/rizz-master-v2:latest
+    image: ghcr.io/zeatalaya/rizz-master-v2:v42
     ports:
       - "3069:3069"
     environment:
