@@ -1,4 +1,4 @@
-# Rizz Master - Smoothly
+# Rizz Master
 
 Analyze your dating app stats across **Tinder**, **Bumble**, and **Hinge** — running inside a Trusted Execution Environment (TEE) with hardware attestation.
 
