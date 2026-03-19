@@ -214,4 +214,4 @@ A React Native + Expo app is in `packages/mobile/` (WIP).
 
 ## License
 
-Private — Smoothly
+Burnt - ZA
